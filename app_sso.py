@@ -1,7 +1,7 @@
 """
 ====================================================================
-项目名称：Special Deal 智能申请系统 (兼容 SSO 与云迁移架构)
-职责：实现企业邮箱 SSO 鉴权、经销商代码动态核对及主数据绑定
+项目名称：Special Deal 智能向导系统 (Phase 1 Intake)
+当前版本：V2.0 - 核心功能：集成试剂明细网格 (Reagent Grid) 与动态求和
 ====================================================================
 """
 
@@ -9,99 +9,154 @@ import streamlit as st
 import pandas as pd
 
 # ==========================================
-# 模块 1：数据适配器 (Data Adapter Pattern)
+# 模块 1：主数据底表缓存层 (Master Data)
 # ==========================================
 @st.cache_data(ttl=600)
-def get_master_data(platform="Google"):
-    """
-    数据获取路由函数：目前模拟 Google Drive 中的主数据，未来可一键切换至微软生态
-    """
-    if platform == "Google":
-        # 模拟我们主数据表里的【经销商清单】
-        data = {
-            "Distributor_Code": ["D1001", "D1002", "ROCHE001"],
-            "Distributor_Name": ["测试经销商", "海安代理", "罗氏直销线"],
-            "Status": ["Active", "Active", "Active"]
-        }
-        return pd.DataFrame(data)
-    else:
-        raise ValueError("不支持的数据平台参数！")
+def get_master_data():
+    """经销商白名单底表 (模拟从后台数据库或 Excel 获取)"""
+    return pd.DataFrame({
+        "Distributor_Code": ["D1001", "D1002", "ROCHE001"],
+        "Distributor_Name": ["测试经销商A", "海安医学代理", "罗氏直销队伍"],
+        "Status": ["Active", "Active", "Active"]
+    })
+
+@st.cache_data(ttl=600)
+def get_reagent_master_data():
+    """试剂货号、名称与标准指导价底表"""
+    return pd.DataFrame({
+        "Item_Code": ["7153414190", "7153716190", "0811122233", "0922233344"],
+        "Product_Name": ["PT 试剂 (凝血酶原时间)", "PTT 试剂 (活化部分凝血活酶时间)", "Trop T HS (高敏肌钙蛋白)", "NT-proBNP (N端心房肽)"],
+        "Product_Line": ["COAG", "COAG", "CARDIAC", "CARDIAC"],
+        "Tests_Per_Kit": [354, 600, 100, 100],
+        "Standard_Price_Tax_Inc": [1.17, 0.67, 25.50, 45.00]
+    })
 
 # ==========================================
-# 模块 2：企业单点登录鉴权 (SSO Authentication)
-# ==========================================
-# ==========================================
-# 模块 2：企业单点登录鉴权 (SSO Authentication) - 升级版
-# 职责：支持多域名白名单校验，准确识别罗氏内部员工身份
+# 模块 2：企业单点登录安全鉴权 (SSO Auth)
 # ==========================================
 def verify_enterprise_sso():
-    """
-    企业级 SSO 验证逻辑：核对登录用户的企业邮箱后缀，确保系统信息安全
-    """
-    st.sidebar.title("🔐 企业身份验证")
-    
-    # 【参数调整区】将这里改为了元组 (Tuple)，可以同时授权多个罗氏的合法尾缀！
-    ALLOWED_DOMAINS = ("@roche.com", "@roche.com.cn", "@roche.ch") 
-    
-    # 模拟 SSO 抓取到的用户邮箱
-    user_email = st.sidebar.text_input("企业邮箱登录鉴权 (SSO Simulation):", placeholder="例如: ricky.xu@roche.com")
+    st.sidebar.title("🔐 企业单点登录")
+    ALLOWED_DOMAINS = ("@roche.com", "@roche.com.cn", "@roche.ch")
+    user_email = st.sidebar.text_input("内测同仁邮箱鉴权:", placeholder="例如: name@roche.com").strip()
     
     if not user_email:
-        st.info("👋 欢迎访问 Special Deal 申请平台。\n请先在左侧侧边栏输入您的企业邮箱完成鉴权解锁。")
+        st.info("👋 欢迎来到 Special Deal 智能录入平台，请在左侧侧边栏输入罗氏邮箱登录。")
+        st.stop()
+    if not user_email.lower().endswith(ALLOWED_DOMAINS):
+        st.error("❌ 拒绝访问：您的登录邮箱不在罗氏内部域白名单内！")
         st.stop()
         
-    # 技能点：在 Python 中，endswith() 函数如果接收一个元组，会自动检查邮箱是不是以其中任意一个域名结尾！
-    if not user_email.lower().strip().endswith(ALLOWED_DOMAINS):
-        st.error(f"❌ 权限拒绝：您的账号 ({user_email}) 不在公司内部授权域名白名单 {ALLOWED_DOMAINS} 内！")
-        st.stop()
-        
-    st.sidebar.success(f"✅ 鉴权成功\n欢迎罗氏同仁：{user_email}")
+    st.sidebar.success(f"✅ 鉴权通过\n操作人: {user_email}")
     return user_email
-# ==========================================
-# 模块 3：在线申请表单 - 第 2 步 Deal 交易信息
-# ==========================================
-def render_deal_header(current_user):
-    st.title("📋 Special Deal 申请 - Phase 1 Intake")
-    st.caption(f"当前登录操作员：{current_user} | 底层数据引擎：Google Workspace 实时同步")
-    st.divider()
-    
-    df_master = get_master_data(platform="Google")
-    st.subheader("2. Deal 信息 (Deal Info)")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # 业务员录入经销商代码
-        dist_code = st.text_input("经销商代码 (Distributor code) *", placeholder="试试输入：D1001 或 ROCHE001").strip().upper()
-        
-    with col2:
-        dist_name = ""
-        is_verified = False
-        
-        if dist_code:
-            # 采用后台核对算法查找主数据
-            match = df_master[df_master["Distributor_Code"] == dist_code]
-            
-            if not match.empty:
-                if match.iloc[0]["Status"] == "Active":
-                    dist_name = match.iloc[0]["Distributor_Name"]
-                    is_verified = True
-                    st.success("✅ 验证通过！主数据已匹配。")
-                else:
-                    st.error("⚠️ 该经销商代码已被冻结，无法受理！")
-            else:
-                st.error("❌ 系统找不到对应的经销商代码，请核实！")
-                
-        # 渲染【只读不可修改】的名称框，彻底解决人工录入错误的痛点
-        st.text_input("经销商名称 (Distributor L1 name) - 自动联想/不可修改 *", value=dist_name, disabled=True)
-        
-    st.divider()
-    if is_verified:
-        st.button("验证完毕，下一步：试剂与仪器明细录入 ➔", type="primary")
-    else:
-        st.button("验证完毕，下一步：试剂与仪器明细录入 ➔", disabled=True)
 
+# ==========================================
+# 模块 3：经销商 Deal 绑定模块 (Deal Info)
+# ==========================================
+def render_deal_header():
+    st.subheader("2. Deal 信息绑定 (Deal Info)")
+    df_master = get_master_data()
+    c1, c2 = st.columns(2)
+    with c1:
+        dist_code = st.text_input("经销商代码 *", placeholder="试试输入: D1001").strip().upper()
+    with c2:
+        dist_name = ""
+        is_valid = False
+        if dist_code:
+            match = df_master[df_master["Distributor_Code"] == dist_code]
+            if not match.empty and match.iloc[0]["Status"] == "Active":
+                dist_name = match.iloc[0]["Distributor_Name"]
+                is_valid = True
+                st.success("✅ 经销商核实有效")
+            else:
+                st.error("❌ 代码不存在或已冻结，请核查")
+        st.text_input("经销商名称 (系统自动联想/锁定)", value=dist_name, disabled=True)
+    return is_valid
+
+# ==========================================
+# 模块 4：【核心功能】试剂动态网格引擎 (Reagent Grid)
+# ==========================================
+def render_reagent_grid():
+    st.divider()
+    st.subheader("4. 试剂明细录入 (Reagent Line Items)")
+    st.caption("💡 操作提示：录入有效试剂货号（例如 `7153414190` 或 `0811122233`），系统会自动联想名称、锁定指导价并动态求和。")
+    
+    # 利用 Session State 在内存中构建虚拟表单行记录
+    if "reagent_rows" not in st.session_state:
+        st.session_state.reagent_rows = [{"code": "", "tests": 10000, "price": 0.0}]
+
+    df_reagent = get_reagent_master_data()
+    total_deal_revenue = 0.0
+    
+    # 循环渲染每一行动态网格
+    for i, row in enumerate(st.session_state.reagent_rows):
+        st.markdown(f"**第 {i+1} 行试剂**")
+        c1, c2, c3, c4, c5, c6 = st.columns([2, 3, 1.2, 1.2, 1.5, 1.8])
+        
+        with c1:
+            code_input = st.text_input(f"货号 (Item Code) #{i+1}", value=row["code"], key=f"c_{i}").strip()
+            st.session_state.reagent_rows[i]["code"] = code_input
+            
+        # 实时 VLOOKUP 联想底表数据
+        match = df_reagent[df_reagent["Item_Code"] == code_input]
+        if not match.empty:
+            p_name = match.iloc[0]["Product_Name"]
+            p_line = match.iloc[0]["Product_Line"]
+            p_kit = match.iloc[0]["Tests_Per_Kit"]
+            p_std_price = match.iloc[0]["Standard_Price_Tax_Inc"]
+        else:
+            p_name = "请填写有效货号..." if not code_input else "未识别货号"
+            p_line = "-"
+            p_kit = 0
+            p_std_price = 0.0
+
+        with c2:
+            st.text_input(f"产品名称 (只读) #{i+1}", value=p_name, disabled=True, key=f"n_{i}")
+        with c3:
+            st.text_input(f"产品线 #{i+1}", value=p_line, disabled=True, key=f"l_{i}")
+        with c4:
+            st.text_input(f"Tests/Kit #{i+1}", value=str(p_kit), disabled=True, key=f"k_{i}")
+        with c5:
+            tests_input = st.number_input(f"预计年测试量 #{i+1}", min_value=0, step=1000, value=row["tests"], key=f"t_{i}")
+            st.session_state.reagent_rows[i]["tests"] = tests_input
+        with c6:
+            # 业务员未修改单价时，自动注入含税指导单价
+            def_price = p_std_price if row["price"] == 0.0 else row["price"]
+            price_input = st.number_input(f"申请含税单价(¥) #{i+1}", min_value=0.0, step=0.1, value=float(def_price), key=f"p_{i}")
+            st.session_state.reagent_rows[i]["price"] = price_input
+            
+        # 实时计算当前行的年总收入
+        row_rev = tests_input * price_input
+        total_deal_revenue += row_rev
+        st.write(f"↳ *此行标准指导价: ¥{p_std_price} | 预估此项年贡献: **¥ {row_rev:,.2f}***")
+        st.write("---")
+
+    # 动态增删操作行按钮区
+    btn1, btn2, _ = st.columns([1.5, 1.5, 6])
+    with btn1:
+        if st.button("➕ 追加一行试剂", type="secondary"):
+            st.session_state.reagent_rows.append({"code": "", "tests": 10000, "price": 0.0})
+            st.rerun()
+    with btn2:
+        if len(st.session_state.reagent_rows) > 1:
+            if st.button("🗑️ 移除底部一行", type="secondary"):
+                st.session_state.reagent_rows.pop()
+                st.rerun()
+                
+    # 顶部及底部大盘财务指标输出
+    st.info(f"📈 **当前 Deal 试剂预估年总收入 (Total Estimated Annual Revenue)： ¥ {total_deal_revenue:,.2f}**")
+
+# ==========================================
+# 模块 5：系统启动主流程
+# ==========================================
 if __name__ == "__main__":
-    st.set_page_config(page_title="Special Deal Intake", page_icon="📑", layout="wide")
-    logged_in_user = verify_enterprise_sso()
-    render_deal_header(logged_in_user)
+    st.set_page_config(page_title="Special Deal Intake", page_icon="📋", layout="wide")
+    user = verify_enterprise_sso()
+    st.title("📋 Special Deal 智能向导申请系统")
+    st.caption(f"当前在线操作人: {user} | 运行环境: Streamlit Zero-Server Cloud")
+    st.divider()
+    
+    # 权限互锁：只有输入有效经销商代码后，才展示试剂录入表格
+    if render_deal_header():
+        render_reagent_grid()
+    else:
+        st.warning("⚠️ 权限互锁提示：请先在上方的 Deal 信息面板中输入有效的【经销商代码】以解锁试剂明细网格！")
