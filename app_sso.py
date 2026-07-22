@@ -42,12 +42,12 @@ def verify_enterprise_sso():
     # 1. 邮箱基础校验
     raw_email = st.sidebar.text_input("1. 请输入您的公司邮箱 *", placeholder="name@roche.com").strip().lower()
     
-    # 2. 专属安全凭证 (PIN/Token) 校验
-    user_token = st.sidebar.text_input("2. 请输入您的USERID *", type="password", placeholder="例如: ROCHE-1234").strip()
+    # 2. 专属安全凭证 (Userid/Token) 校验
+    user_token = st.sidebar.text_input("2. 请输入您的USER ID *", type="password", placeholder="例如: ROCHE-1234").strip()
     
     # 未输入完整时的友好引导
     if not raw_email or not user_token:
-        st.info("👋 **安全访问限制：**\n\n为了保护企业商业数据，请在左侧栏输入您的 **罗氏公司邮箱** 及管理员分配的 **专属授权 PIN 码** 以解锁系统。")
+        st.info("👋 **安全访问限制：**\n\n为了保护企业商业数据，请在左侧栏输入您的 **罗氏公司邮箱** 及 **USER ID** 以解锁系统。")
         st.stop()
         
     # 拦截 1：检测邮箱后缀是否合法
@@ -55,16 +55,17 @@ def verify_enterprise_sso():
         st.sidebar.error("❌ 拒绝访问：非罗氏内部域邮箱")
         st.stop()
         
-    # 拦截 2：【最核心安全检查】去 Streamlit 隐形保险箱里核对邮箱和 PIN 码是否真实匹配！
+    # 拦截 2：【最核心安全检查】去 Streamlit 隐形保险箱里核对邮箱和 
+    是否真实匹配！
     # 如果开发者还没有在云端配置 secrets，则给予安全降级防错提示
     if "auth_users" in st.secrets:
         valid_users = st.secrets["auth_users"]
         # 核对邮箱是否在白名单里，且密码完全一致
         if raw_email not in valid_users or valid_users[raw_email] != user_token:
-            st.sidebar.error("❌ 鉴权失败：邮箱不存在或安全 PIN 码错误！")
+            st.sidebar.error("❌ 鉴权失败：邮箱不存在或安全 USER ID错误！")
             st.error("""
             ### 🚨 非法登录拦截
-            系统后台未检索到您的邮箱凭证，或您输入的 PIN 码不正确。
+            系统后台未检索到您的邮箱凭证，或您输入的 USER ID不正确。
             - 如果您是新加入内测的同仁，请联系项目负责人（系统管理员）申请在云端白名单中开通您的访问权限。
             """)
             st.stop()
