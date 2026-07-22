@@ -55,8 +55,7 @@ def verify_enterprise_sso():
         st.sidebar.error("❌ 拒绝访问：非罗氏内部域邮箱")
         st.stop()
         
-    # 拦截 2：【最核心安全检查】去 Streamlit 隐形保险箱里核对邮箱和 
-    是否真实匹配！
+    # 拦截 2：【最核心安全检查】去 Streamlit 隐形保险箱里核对邮箱和USER ID是否真实匹配！
     # 如果开发者还没有在云端配置 secrets，则给予安全降级防错提示
     if "auth_users" in st.secrets:
         valid_users = st.secrets["auth_users"]
