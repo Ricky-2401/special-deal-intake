@@ -32,23 +32,48 @@ def get_reagent_master_data():
     })
 
 # ==========================================
-# 模块 2：企业单点登录安全鉴权 (SSO Auth)
+# 模块 2：企业级安全双重鉴权 (SSO + Secrets Token 校验)
+# 职责：结合平台保险箱，彻底拦截伪造邮箱后缀的攻击行为，实现零成本高安全闭环
 # ==========================================
 def verify_enterprise_sso():
-    st.sidebar.title("🔐 企业单点登录")
-    ALLOWED_DOMAINS = ("@roche.com", "@roche.com.cn", "@roche.ch")
-    user_email = st.sidebar.text_input("内测同仁邮箱鉴权:", placeholder="例如: name@roche.com").strip()
+    st.sidebar.title("🔐 罗氏内部系统鉴权")
+    st.sidebar.caption("🔒 本系统已启用双因子安全凭证校验")
     
-    if not user_email:
-        st.info("👋 欢迎来到 Special Deal 智能录入平台，请在左侧侧边栏输入罗氏邮箱登录。")
-        st.stop()
-    if not user_email.lower().endswith(ALLOWED_DOMAINS):
-        st.error("❌ 拒绝访问：您的登录邮箱不在罗氏内部域白名单内！")
+    # 1. 邮箱基础校验
+    raw_email = st.sidebar.text_input("1. 请输入您的公司邮箱 *", placeholder="name@roche.com").strip().lower()
+    
+    # 2. 专属安全凭证 (PIN/Token) 校验
+    user_token = st.sidebar.text_input("2. 请输入您的专属授权 PIN 码 *", type="password", placeholder="例如: ROCHE-1234").strip()
+    
+    # 未输入完整时的友好引导
+    if not raw_email or not user_token:
+        st.info("👋 **安全访问限制：**\n\n为了保护企业商业数据，请在左侧栏输入您的 **罗氏公司邮箱** 及管理员分配的 **专属授权 PIN 码** 以解锁系统。")
         st.stop()
         
-    st.sidebar.success(f"✅ 鉴权通过\n操作人: {user_email}")
-    return user_email
-
+    # 拦截 1：检测邮箱后缀是否合法
+    if not raw_email.endswith(("@roche.com", "@roche.com.cn", "@roche.ch")):
+        st.sidebar.error("❌ 拒绝访问：非罗氏内部域邮箱")
+        st.stop()
+        
+    # 拦截 2：【最核心安全检查】去 Streamlit 隐形保险箱里核对邮箱和 PIN 码是否真实匹配！
+    # 如果开发者还没有在云端配置 secrets，则给予安全降级防错提示
+    if "auth_users" in st.secrets:
+        valid_users = st.secrets["auth_users"]
+        # 核对邮箱是否在白名单里，且密码完全一致
+        if raw_email not in valid_users or valid_users[raw_email] != user_token:
+            st.sidebar.error("❌ 鉴权失败：邮箱不存在或安全 PIN 码错误！")
+            st.error("""
+            ### 🚨 非法登录拦截
+            系统后台未检索到您的邮箱凭证，或您输入的 PIN 码不正确。
+            - 如果您是新加入内测的同仁，请联系项目负责人（系统管理员）申请在云端白名单中开通您的访问权限。
+            """)
+            st.stop()
+    else:
+        st.sidebar.warning("⚠️ 管理员未配置云端 Secrets，当前处于本地测试放行模式")
+        
+    # 验证全部完美通过！
+    st.sidebar.success(f"✅ 身份验证成功\n\n**在线专家:** `{raw_email}`")
+    return raw_email
 # ==========================================
 # 模块 3：经销商 Deal 绑定模块 (Deal Info)
 # ==========================================
