@@ -43,7 +43,7 @@ def verify_enterprise_sso():
     raw_email = st.sidebar.text_input("1. 请输入您的公司邮箱 *", placeholder="name@roche.com").strip().lower()
     
     # 2. 专属安全凭证 (PIN/Token) 校验
-    user_token = st.sidebar.text_input("2. 请输入您的专属授权 PIN 码 *", type="password", placeholder="例如: ROCHE-1234").strip()
+    user_token = st.sidebar.text_input("2. 请输入您的USERID *", type="password", placeholder="例如: ROCHE-1234").strip()
     
     # 未输入完整时的友好引导
     if not raw_email or not user_token:
